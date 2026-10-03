@@ -4,7 +4,7 @@ Aplicação web para registrar tickets de suporte e acompanhá-los em um Kanban 
 
 - **Frontend:** HTML, CSS e JavaScript puro (`fetch()` para falar com o backend)
 - **Backend:** Python + Flask (rotas e sessão)
-- **Banco:** PostgreSQL (na Neon, quando publicado), acessado com SQL puro e *prepared statements*
+- **Banco:** PostgreSQL (na Neon, quando publicado), acessado com SQL puro e consultas parametrizadas
 - **Hospedagem:** Vercel (backend e frontend) + Neon (banco)
 
 ## Estrutura
@@ -73,7 +73,7 @@ UPDATE usuarios SET perfil = 'suporte' WHERE email = 'email@da.pessoa';
 ## Telas
 
 1. **Login** e 2. **Cadastro**
-3. **Kanban** com quatro colunas, abas "Meus tickets" / "Todos os tickets", botão "Novo ticket" e filtros que aplicam na hora (busca, prioridade, criado por)
+3. **Kanban** com quatro colunas, abas "Meus tickets" / "Todos os tickets", botão "Novo ticket" e filtros que aplicam na hora (busca, prioridade e criado por; este último some em "Meus tickets")
 4. **Novo ticket / Editar ticket** (janela)
 5. **Detalhes do ticket** (janela): dados, ações disponíveis para quem está logado, comentários e histórico em linha do tempo
 
@@ -96,11 +96,11 @@ UPDATE usuarios SET perfil = 'suporte' WHERE email = 'email@da.pessoa';
 
 **Comentários.** Qualquer pessoa logada pode comentar em qualquer ticket (todos já veem todos), exceto nos **concluídos**, que ficam somente leitura como o resto do ticket. **Só o autor edita** o próprio comentário e a tela passa a mostrar "editado" (com a data ao passar o mouse). O autor também é o único que pode excluí-lo, mesmo para quem é do suporte. A exclusão é lógica, como nos tickets. Em ticket concluído ninguém edita nem exclui comentários. Comentar não altera "Atualizado em". São separados do histórico: o histórico é o registro automático do que aconteceu, o comentário é texto escrito por uma pessoa. O card mostra quantos comentários o ticket tem.
 
-**Confirmações.** Pedem confirmação: concluir e excluir. Mover entre Backlog, Em andamento e Stage é direto, com aviso na tela.
+**Confirmações.** Pedem confirmação: concluir e excluir. Mover entre Backlog, Em andamento e Stage é direto e sem aviso (o card muda de coluna, o que já é visível). Só criar e concluir um ticket mostram uma mensagem de sucesso.
 
 **Stage é a etapa de teste.** Quem criou o ticket é quem testa: em Stage ele pode concluir (aprovou) ou devolver para Em andamento (reprovou). A devolução exige um motivo, de qualquer perfil (inclusive suporte), que é salvo como comentário do ticket e aparece no histórico como "devolveu o ticket". O suporte também pode concluir, caso o criador esqueça.
 
-**Histórico.** Registra criação, mudança de etapa, conclusão, reabertura, mudança de prioridade e edição de título/descrição, sempre com quem fez e quando (e valor anterior e novo, quando existem).
+**Histórico.** Registra criação, mudança de etapa, conclusão, mudança de prioridade e edição de título/descrição, sempre com quem fez e quando (e valor anterior e novo, quando existem).
 
 **"Meus tickets".** São os tickets em que eu sou o responsável (`criado_por`), incluindo os que o suporte abriu em meu nome.
 
