@@ -1,0 +1,611 @@
+/* =====================================================================
+   Mini Helpdesk - estilos
+   Organização: 1) variáveis  2) base  3) formulários e botões
+   4) cabeçalho  5) login/cadastro  6) kanban  7) janelas  8) detalhes
+   9) mensagens  10) telas menores
+   ===================================================================== */
+
+/* ---------- 1) Variáveis: cores e medidas num lugar só ---------- */
+:root {
+    --fundo: #f4f5f7;
+    --superficie: #ffffff;
+    --texto: #1f2933;
+    --texto-suave: #5f6c7b;
+    --borda: #d9dee5;
+    --primaria: #2457c5;
+    --primaria-escura: #1a449d;
+    --perigo: #b42318;
+    --sucesso: #146c43;
+
+    /* Prioridades: cor + texto + ícone (nunca só a cor) */
+    --alta-fundo: #fde8e6;   --alta-texto: #9b1c12;
+    --media-fundo: #fff4d6;  --media-texto: #7a5300;
+    --baixa-fundo: #e1f4e8;  --baixa-texto: #14653b;
+
+    --raio: 8px;
+    --sombra: 0 1px 3px rgba(16, 24, 40, 0.1);
+}
+
+/* ---------- 2) Base ---------- */
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    font-size: 16px;
+    line-height: 1.5;
+    color: var(--texto);
+    background: var(--fundo);
+}
+
+/* O atributo hidden esconde o elemento. Reforço aqui porque algumas regras
+   de "display" mais abaixo poderiam anulá-lo. */
+[hidden] {
+    display: none !important;
+}
+
+h1, h2, h3 {
+    margin: 0;
+    line-height: 1.25;
+}
+
+p {
+    margin: 0;
+}
+
+main {
+    padding: 24px;
+}
+
+/* ---------- 3) Formulários e botões ---------- */
+label {
+    display: block;
+    margin: 14px 0 4px;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+input,
+select,
+textarea {
+    width: 100%;
+    padding: 10px 12px;
+    font: inherit;
+    color: inherit;
+    background: var(--superficie);
+    border: 1px solid var(--borda);
+    border-radius: var(--raio);
+}
+
+textarea {
+    resize: vertical;
+}
+
+/* Foco bem visível para quem navega pelo teclado */
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+button:focus-visible {
+    outline: 3px solid #9db8f0;
+    outline-offset: 1px;
+}
+
+button {
+    padding: 10px 16px;
+    font: inherit;
+    font-weight: 600;
+    color: #ffffff;
+    background: var(--primaria);
+    border: 1px solid var(--primaria);
+    border-radius: var(--raio);
+    cursor: pointer;
+}
+
+button:hover {
+    background: var(--primaria-escura);
+    border-color: var(--primaria-escura);
+}
+
+button:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+/* Botão secundário: fundo branco */
+button.secundario {
+    color: var(--texto);
+    background: var(--superficie);
+    border-color: var(--borda);
+}
+
+button.secundario:hover {
+    background: #eef0f3;
+}
+
+/* Botão de ação perigosa (excluir) */
+button.perigo {
+    background: var(--perigo);
+    border-color: var(--perigo);
+}
+
+button.perigo:hover {
+    background: #8f1b11;
+    border-color: #8f1b11;
+}
+
+/* Botão só com ícone (editar, excluir, fechar) */
+button.icone {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 10px 12px;
+}
+
+.detalhe-botoes {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* O X de fechar é cinza, discreto */
+#btn-fechar-detalhe {
+    color: var(--texto-suave);
+}
+
+/* Botão com cara de link de texto */
+button.link {
+    padding: 0;
+    color: var(--primaria);
+    background: none;
+    border: none;
+    text-decoration: underline;
+}
+
+button.link:hover {
+    background: none;
+    color: var(--primaria-escura);
+}
+
+.dica {
+    margin-top: 4px;
+    font-size: 13px;
+    color: var(--texto-suave);
+}
+
+.botoes {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 20px;
+}
+
+.duas-colunas {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+
+/* ---------- 4) Cabeçalho ---------- */
+.cabecalho {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 24px;
+    background: var(--superficie);
+    border-bottom: 1px solid var(--borda);
+}
+
+.marca {
+    font-size: 20px;
+    color: var(--primaria);
+}
+
+.cabecalho-usuario {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+}
+
+.usuario-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+}
+
+/* Selo: etiqueta pequena (perfil, etapa) */
+.selo {
+    display: inline-block;
+    padding: 2px 10px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--texto-suave);
+    background: #eef0f3;
+    border-radius: 999px;
+}
+
+/* ---------- 5) Login e cadastro ---------- */
+.tela-centralizada {
+    display: flex;
+    justify-content: center;
+    padding-top: 6vh;
+}
+
+.caixa {
+    width: 100%;
+    max-width: 400px;
+    padding: 28px;
+    background: var(--superficie);
+    border: 1px solid var(--borda);
+    border-radius: 12px;
+    box-shadow: var(--sombra);
+}
+
+.caixa h2 {
+    margin-top: 8px;
+    font-size: 18px;
+}
+
+.caixa button[type="submit"] {
+    width: 100%;
+    margin-top: 20px;
+}
+
+.troca-tela {
+    margin-top: 16px;
+    font-size: 14px;
+    text-align: center;
+    color: var(--texto-suave);
+}
+
+/* Mensagem de erro dentro de um formulário (login) */
+.erro-form {
+    margin-top: 12px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--perigo);
+}
+
+/* ---------- 6) Kanban ---------- */
+.barra {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 20px;
+}
+
+/* Abas "Meus tickets" / "Todos os tickets" */
+.abas {
+    display: inline-flex;
+    border: 1px solid var(--borda);
+    border-radius: var(--raio);
+    overflow: hidden;
+}
+
+.abas button {
+    color: var(--texto);
+    background: var(--superficie);
+    border: none;
+    border-radius: 0;
+}
+
+.abas button:hover {
+    background: #eef0f3;
+}
+
+/* A aba ativa usa aria-pressed="true": o mesmo atributo serve para o leitor de tela e para o visual */
+.abas button[aria-pressed="true"] {
+    color: #ffffff;
+    background: var(--primaria);
+}
+
+.filtros {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 8px;
+}
+
+.filtros label {
+    margin-top: 0;
+}
+
+.filtros input,
+.filtros select {
+    width: auto;
+    min-width: 150px;
+}
+
+.kanban {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    align-items: start;
+}
+
+.coluna {
+    padding: 12px;
+    background: #e9ecf0;
+    border-radius: 12px;
+}
+
+.coluna h2 {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+    font-size: 13px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--texto-suave);
+}
+
+.contador {
+    padding: 0 8px;
+    font-size: 12px;
+    background: var(--superficie);
+    border-radius: 999px;
+}
+
+.cards {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-height: 40px;
+}
+
+.vazio {
+    font-size: 14px;
+    text-align: center;
+    color: var(--texto-suave);
+}
+
+/* Cada card é um <button> (clicável e acessível pelo teclado) */
+.card {
+    display: block;
+    width: 100%;
+    padding: 12px;
+    text-align: left;
+    color: var(--texto);
+    background: var(--superficie);
+    border: 1px solid var(--borda);
+    border-radius: var(--raio);
+    box-shadow: var(--sombra);
+}
+
+.card:hover {
+    background: var(--superficie);
+    border-color: var(--primaria);
+}
+
+.card-topo {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 6px;
+}
+
+.card-id {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--texto-suave);
+}
+
+.card-titulo {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: 600;
+    overflow-wrap: anywhere;
+}
+
+.card-criador {
+    font-size: 13px;
+    font-weight: 400;
+    color: var(--texto-suave);
+}
+
+/* Etiquetas de prioridade: cor + símbolo + TEXTO */
+.prioridade {
+    display: inline-block;
+    padding: 2px 10px;
+    font-size: 12px;
+    font-weight: 700;
+    border-radius: 999px;
+}
+
+.prioridade-alta {
+    color: var(--alta-texto);
+    background: var(--alta-fundo);
+}
+
+.prioridade-media {
+    color: var(--media-texto);
+    background: var(--media-fundo);
+}
+
+.prioridade-baixa {
+    color: var(--baixa-texto);
+    background: var(--baixa-fundo);
+}
+
+/* ---------- 7) Janelas (<dialog>) ---------- */
+dialog {
+    width: calc(100% - 32px);
+    max-width: 520px;
+    padding: 24px;
+    color: var(--texto);
+    background: var(--superficie);
+    border: none;
+    border-radius: 12px;
+    box-shadow: 0 10px 40px rgba(16, 24, 40, 0.3);
+}
+
+dialog.grande {
+    max-width: 900px;
+}
+
+dialog::backdrop {
+    background: rgba(16, 24, 40, 0.5);
+}
+
+dialog h2 {
+    font-size: 20px;
+}
+
+#confirmar-texto {
+    margin-top: 8px;
+    color: var(--texto-suave);
+}
+
+/* ---------- 8) Detalhes do ticket ---------- */
+.detalhe-topo {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+#detalhe-titulo {
+    overflow-wrap: anywhere;
+}
+
+.detalhe-corpo {
+    display: grid;
+    grid-template-columns: 3fr 2fr;
+    gap: 28px;
+}
+
+.detalhe-selos {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.descricao {
+    margin-bottom: 16px;
+    white-space: pre-wrap;         /* mantém as quebras de linha digitadas */
+    overflow-wrap: anywhere;
+}
+
+.info {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 6px 16px;
+    margin: 0 0 20px;
+    font-size: 14px;
+}
+
+.info dt {
+    font-weight: 600;
+    color: var(--texto-suave);
+}
+
+.info dd {
+    margin: 0;
+}
+
+.acoes-detalhe {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.detalhe-historico h3 {
+    margin-bottom: 12px;
+    font-size: 16px;
+}
+
+/* Linha do tempo: uma linha vertical com uma bolinha em cada registro */
+.timeline {
+    margin: 0;
+    padding: 0 0 0 18px;
+    list-style: none;
+    border-left: 2px solid var(--borda);
+}
+
+.timeline li {
+    position: relative;
+    margin-bottom: 16px;
+    font-size: 14px;
+}
+
+.timeline li::before {
+    content: "";
+    position: absolute;
+    left: -25px;
+    top: 5px;
+    width: 12px;
+    height: 12px;
+    background: var(--primaria);
+    border: 2px solid var(--superficie);
+    border-radius: 50%;
+}
+
+.timeline .quando {
+    display: block;
+    font-size: 12px;
+    color: var(--texto-suave);
+}
+
+/* ---------- 9) Mensagens de sucesso e erro ---------- */
+#mensagem {
+    inset: auto 16px 16px auto;     /* canto inferior direito */
+    max-width: calc(100% - 32px);
+    margin: 0;
+    padding: 12px 16px;
+    font-weight: 600;
+    color: #ffffff;
+    border: none;
+    border-radius: var(--raio);
+    box-shadow: 0 4px 16px rgba(16, 24, 40, 0.3);
+}
+
+#mensagem.sucesso {
+    background: var(--sucesso);
+}
+
+#mensagem.erro {
+    background: var(--perigo);
+}
+
+/* ---------- 10) Telas menores ---------- */
+@media (max-width: 1100px) {
+    .kanban {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 700px) {
+    main {
+        padding: 16px;
+    }
+
+    .cabecalho {
+        padding: 12px 16px;
+    }
+
+    .kanban {
+        grid-template-columns: 1fr;
+    }
+
+    .filtros,
+    .filtros div,
+    .filtros input,
+    .filtros select {
+        width: 100%;
+    }
+
+    .detalhe-corpo,
+    .duas-colunas {
+        grid-template-columns: 1fr;
+    }
+}

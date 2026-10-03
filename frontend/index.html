@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mini Helpdesk</title>
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+    <!-- ============ CABEÇALHO (só aparece depois do login) ============ -->
+    <header id="cabecalho" class="cabecalho" hidden>
+        <h1 class="marca">Mini Helpdesk</h1>
+        <div class="cabecalho-usuario">
+            <p class="usuario-info">
+                <span id="usuario-nome"></span>
+                <span id="usuario-perfil" class="selo"></span>
+            </p>
+            <button type="button" id="btn-novo-ticket">+ Novo ticket</button>
+            <button type="button" id="btn-sair" class="secundario">Sair</button>
+        </div>
+    </header>
+
+    <main>
+
+        <!-- ============ TELA 1: LOGIN ============ -->
+        <section id="tela-login" class="tela-centralizada" hidden>
+            <form id="form-login" class="caixa">
+                <h1 class="marca">Mini Helpdesk</h1>
+                <h2>Entrar</h2>
+
+                <label for="login-email">E-mail</label>
+                <input type="email" id="login-email" autocomplete="email" required>
+
+                <label for="login-senha">Senha</label>
+                <input type="password" id="login-senha" autocomplete="current-password" required>
+
+                <!-- Erro de login aparece aqui, junto do formulário (role="alert": leitor de tela anuncia) -->
+                <p id="login-erro" class="erro-form" role="alert" hidden></p>
+
+                <button type="submit" id="btn-login">Entrar</button>
+                <p class="troca-tela">Ainda não tem conta?
+                    <button type="button" class="link" data-ir-para="cadastro">Cadastre-se</button>
+                </p>
+            </form>
+        </section>
+
+        <!-- ============ TELA 2: CADASTRO ============ -->
+        <section id="tela-cadastro" class="tela-centralizada" hidden>
+            <form id="form-cadastro" class="caixa">
+                <h1 class="marca">Mini Helpdesk</h1>
+                <h2>Criar conta</h2>
+
+                <label for="cadastro-nome">Nome</label>
+                <input type="text" id="cadastro-nome" maxlength="100" autocomplete="name" required>
+
+                <label for="cadastro-email">E-mail</label>
+                <input type="email" id="cadastro-email" maxlength="150" autocomplete="email" required>
+
+                <label for="cadastro-senha">Senha</label>
+                <input type="password" id="cadastro-senha" minlength="8" maxlength="128" autocomplete="new-password" required>
+                <p class="dica">Mínimo de 8 caracteres.</p>
+
+                <button type="submit" id="btn-cadastro">Criar conta</button>
+                <p class="troca-tela">Já tem conta?
+                    <button type="button" class="link" data-ir-para="login">Entrar</button>
+                </p>
+            </form>
+        </section>
+
+        <!-- ============ TELA 3: KANBAN ============ -->
+        <section id="tela-kanban" hidden>
+
+            <div class="barra">
+                <!-- Alternar entre "Meus tickets" e "Todos os tickets" -->
+                <div class="abas" role="group" aria-label="Quais tickets mostrar">
+                    <button type="button" id="aba-meus" aria-pressed="false">Meus tickets</button>
+                    <button type="button" id="aba-todos" aria-pressed="true">Todos os tickets</button>
+                </div>
+
+                <!-- Filtros -->
+                <form id="form-filtros" class="filtros">
+                    <div>
+                        <label for="filtro-busca">Buscar</label>
+                        <input type="search" id="filtro-busca" placeholder="Título ou descrição" maxlength="100">
+                    </div>
+                    <div>
+                        <label for="filtro-prioridade">Prioridade</label>
+                        <select id="filtro-prioridade">
+                            <option value="">Todas</option>
+                            <option value="alta">Alta</option>
+                            <option value="media">Média</option>
+                            <option value="baixa">Baixa</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="filtro-criador">Criado por</label>
+                        <select id="filtro-criador">
+                            <option value="">Todos</option>
+                        </select>
+                    </div>
+                    <button type="submit">Buscar</button>
+                    <button type="button" id="btn-limpar-filtros" class="secundario">Limpar</button>
+                </form>
+            </div>
+
+            <!-- As quatro colunas. O JavaScript preenche os cards dentro de cada .cards -->
+            <div class="kanban">
+                <section class="coluna" aria-labelledby="titulo-backlog">
+                    <h2 id="titulo-backlog">Backlog <span class="contador" id="contador-backlog">0</span></h2>
+                    <div class="cards" id="cards-backlog"></div>
+                </section>
+                <section class="coluna" aria-labelledby="titulo-andamento">
+                    <h2 id="titulo-andamento">Em andamento <span class="contador" id="contador-andamento">0</span></h2>
+                    <div class="cards" id="cards-andamento"></div>
+                </section>
+                <section class="coluna" aria-labelledby="titulo-stage">
+                    <h2 id="titulo-stage">Stage <span class="contador" id="contador-stage">0</span></h2>
+                    <div class="cards" id="cards-stage"></div>
+                </section>
+                <section class="coluna" aria-labelledby="titulo-concluido">
+                    <h2 id="titulo-concluido">Concluído <span class="contador" id="contador-concluido">0</span></h2>
+                    <div class="cards" id="cards-concluido"></div>
+                </section>
+            </div>
+        </section>
+    </main>
+
+    <!-- ============ TELA 4: CRIAR / EDITAR TICKET (janela nativa <dialog>) ============ -->
+    <dialog id="dialog-ticket" aria-labelledby="ticket-titulo-janela">
+        <form id="form-ticket">
+            <h2 id="ticket-titulo-janela">Novo ticket</h2>
+
+            <label for="ticket-titulo">Título</label>
+            <input type="text" id="ticket-titulo" maxlength="150" required>
+
+            <label for="ticket-descricao">Descrição</label>
+            <textarea id="ticket-descricao" rows="5" maxlength="2000" required></textarea>
+
+            <div class="duas-colunas">
+                <div>
+                    <label for="ticket-prioridade">Prioridade</label>
+                    <select id="ticket-prioridade" required>
+                        <option value="alta">Alta</option>
+                        <option value="media" selected>Média</option>
+                        <option value="baixa">Baixa</option>
+                    </select>
+                </div>
+                <!-- Só aparece na criação. Usuário comum: fixo nele mesmo. Suporte: pode escolher outra pessoa. -->
+                <div id="campo-responsavel">
+                    <label for="ticket-responsavel">Responsável</label>
+                    <select id="ticket-responsavel" required></select>
+                </div>
+            </div>
+            <p id="ticket-dica-responsavel" class="dica" hidden>O responsável é quem abre o ticket.</p>
+
+            <div class="botoes">
+                <button type="button" id="btn-cancelar-ticket" class="secundario">Cancelar</button>
+                <button type="submit" id="btn-salvar-ticket">Salvar</button>
+            </div>
+        </form>
+    </dialog>
+
+    <!-- ============ TELA 5: DETALHES DO TICKET ============ -->
+    <dialog id="dialog-detalhe" class="grande" aria-labelledby="detalhe-titulo">
+        <div class="detalhe-topo">
+            <h2 id="detalhe-titulo"></h2>
+            <!-- Ações sobre o ticket (editar, excluir) + fechar a janela, juntas no canto -->
+            <div class="detalhe-botoes">
+                <span id="detalhe-acoes-topo" class="acoes-detalhe"></span>
+                <button type="button" id="btn-fechar-detalhe" class="secundario">Fechar</button>
+            </div>
+        </div>
+        <div class="detalhe-corpo">
+            <section class="detalhe-dados" aria-label="Dados do ticket">
+                <p class="detalhe-selos">
+                    <span id="detalhe-prioridade"></span>
+                    <span id="detalhe-etapa" class="selo"></span>
+                </p>
+                <p id="detalhe-descricao" class="descricao"></p>
+                <dl class="info">
+                    <dt>Criado por</dt><dd id="detalhe-criador"></dd>
+                    <dt>Criado em</dt><dd id="detalhe-criado-em"></dd>
+                    <dt>Atualizado em</dt><dd id="detalhe-atualizado-em"></dd>
+                </dl>
+                <div id="detalhe-acoes" class="acoes-detalhe"></div>
+            </section>
+            <section class="detalhe-historico" aria-labelledby="titulo-historico">
+                <h3 id="titulo-historico">Histórico</h3>
+                <ol id="lista-historico" class="timeline"></ol>
+            </section>
+        </div>
+    </dialog>
+
+    <!-- Janela de confirmação (concluir, excluir).
+         method="dialog" fecha a janela sozinha e guarda o value do botão clicado. -->
+    <dialog id="dialog-confirmar" aria-labelledby="confirmar-titulo">
+        <form method="dialog">
+            <h2 id="confirmar-titulo"></h2>
+            <p id="confirmar-texto"></p>
+            <div class="botoes">
+                <button type="submit" value="cancelar" class="secundario">Cancelar</button>
+                <button type="submit" value="ok" id="confirmar-ok"></button>
+            </div>
+        </form>
+    </dialog>
+
+    <!-- Mensagens de sucesso e erro. popover="manual" faz o aviso aparecer
+         por cima de qualquer janela aberta. -->
+    <div id="mensagem" popover="manual" role="status" aria-live="polite"></div>
+
+    <script src="/app.js"></script>
+</body>
+</html>

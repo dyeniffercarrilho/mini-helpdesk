@@ -1,0 +1,15 @@
+# Este arquivo existe só para a Vercel: ele diz onde está o "app" do Flask
+# (a Vercel procura app.py na raiz, mas o nosso fica em backend/).
+# Para rodar localmente, use o requirements.txt (veja o README).
+[project]
+name = "mini-helpdesk"
+version = "1.0.0"
+requires-python = ">=3.12"
+dependencies = [
+    "flask>=3.0",
+    "psycopg[binary]>=3.1",
+    "python-dotenv>=1.0",
+]
+
+[tool.vercel]
+entrypoint = "backend.app:app"
