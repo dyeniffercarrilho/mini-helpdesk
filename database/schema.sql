@@ -1,12 +1,14 @@
 -- =====================================================================
 -- Banco de dados do Mini Helpdesk (PostgreSQL)
 --
--- MODELO CONCEITUAL (3 tabelas):
+-- MODELO CONCEITUAL (4 tabelas):
 --
 --   usuarios 1 ----< N tickets    (um usuário é o RESPONSÁVEL por vários tickets:
 --                                  quem abriu, ou em nome de quem o suporte abriu)
 --   tickets  1 ----< N historico  (um ticket tem vários registros de histórico)
 --   usuarios 1 ----< N historico  (um usuário REALIZA várias ações)
+--   tickets  1 ----< N comentarios (um ticket tem vários comentários)
+--   usuarios 1 ----< N comentarios (um usuário ESCREVE vários comentários)
 --
 -- Como usar: cole este arquivo inteiro no "SQL Editor" da Neon e execute,
 -- ou rode:  psql "$DATABASE_URL" -f database/schema.sql
@@ -14,6 +16,7 @@
 -- ATENÇÃO: ele APAGA as tabelas e cria tudo de novo.
 -- =====================================================================
 
+DROP TABLE IF EXISTS comentarios;
 DROP TABLE IF EXISTS historico;
 DROP TABLE IF EXISTS tickets;
 DROP TABLE IF EXISTS usuarios;
@@ -88,6 +91,26 @@ CREATE TABLE historico (
 
 CREATE INDEX idx_historico_ticket ON historico (ticket_id);
 
+-- ---------------------------------------------------------------------
+-- COMENTÁRIOS
+-- Conversa sobre o ticket. É separada do histórico: o histórico é o registro
+-- automático do que aconteceu; o comentário é texto escrito por uma pessoa.
+-- Só o autor edita (editado_em guarda quando, para a tela mostrar "editado").
+-- Excluir é lógico, como nos tickets: excluido = TRUE esconde o comentário,
+-- mas a linha continua no banco.
+-- ---------------------------------------------------------------------
+CREATE TABLE comentarios (
+    id         INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    ticket_id  INTEGER       NOT NULL REFERENCES tickets (id),
+    usuario_id INTEGER       NOT NULL REFERENCES usuarios (id),
+    texto      VARCHAR(1000) NOT NULL,
+    excluido   BOOLEAN       NOT NULL DEFAULT FALSE,
+    criado_em  TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+    editado_em TIMESTAMPTZ                      -- NULL = nunca foi editado
+);
+
+CREATE INDEX idx_comentarios_ticket ON comentarios (ticket_id);
+
 -- =====================================================================
 -- DADOS DE TESTE
 -- Senhas de demonstração (cada usuário tem a sua):
@@ -123,3 +146,11 @@ INSERT INTO historico (ticket_id, usuario_id, acao, valor_anterior, valor_novo, 
     (4, 2, 'etapa',     'backlog',   'andamento', NOW() - INTERVAL '3 days 22 hours'),
     (4, 2, 'etapa',     'andamento', 'stage',     NOW() - INTERVAL '3 days 2 hours'),
     (4, 3, 'concluido', 'stage',     'concluido', NOW() - INTERVAL '2 days 18 hours');
+
+-- Alguns comentários de exemplo
+-- O 2º comentário do ticket 1 já nasce "editado", só para mostrar como aparece na tela.
+INSERT INTO comentarios (ticket_id, usuario_id, texto, criado_em, editado_em) VALUES
+    (1, 2, 'Vou olhar a impressora amanhã cedo.',                              NOW() - INTERVAL '1 day 21 hours',            NULL),
+    (1, 1, 'Obrigada! O erro ainda aparece no visor.',                         NOW() - INTERVAL '1 day 19 hours',            NOW() - INTERVAL '1 day 18 hours'),
+    (2, 3, 'Em análise: parece ser um problema no servidor de autenticação.',  NOW() - INTERVAL '1 day 7 hours 30 minutes',  NULL),
+    (4, 3, 'E-mail criado. A senha provisória foi enviada ao gestor.',         NOW() - INTERVAL '2 days 19 hours',           NULL);

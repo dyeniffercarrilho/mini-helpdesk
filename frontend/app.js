@@ -56,7 +56,6 @@ const telaKanban = document.getElementById("tela-kanban");
 const dialogTicket = document.getElementById("dialog-ticket");
 const dialogDetalhe = document.getElementById("dialog-detalhe");
 const dialogConfirmar = document.getElementById("dialog-confirmar");
-const caixaMensagem = document.getElementById("mensagem");
 
 
 /* ---------- 2) Funções auxiliares ---------- */
@@ -88,23 +87,40 @@ async function chamarApi(url, metodo = "GET", corpo = null) {
     }
 }
 
-// Mostra um aviso no canto da tela por 4 segundos. tipo: "sucesso" ou "erro".
-let temporizadorMensagem = null;
-function mostrarMensagem(texto, tipo) {
-    caixaMensagem.textContent = texto;
-    caixaMensagem.className = tipo;
-    if (caixaMensagem.matches(":popover-open")) {
-        caixaMensagem.hidePopover();
-    }
-    caixaMensagem.showPopover(); // popover = camada acima de tudo, até de janelas abertas
+// Aviso único do sistema: caixinha no alto da tela, verde (sucesso) ou vermelha (erro),
+// que some sozinha ou ao clicar no X. tipo: "sucesso" ou "erro".
+// popover = camada acima de tudo, até de janelas abertas.
+const avisoCriado = document.getElementById("aviso-criado");
+let temporizadorAviso = null;
 
-    clearTimeout(temporizadorMensagem);
-    temporizadorMensagem = setTimeout(function () {
-        if (caixaMensagem.matches(":popover-open")) {
-            caixaMensagem.hidePopover();
-        }
-    }, 4000);
+const ICONE_AVISO = {
+    sucesso: '<circle cx="12" cy="12" r="10"/><path d="m8 12.5 3 3 5-6"/>',
+    erro: '<circle cx="12" cy="12" r="10"/><path d="M12 7v6"/><path d="M12 16.5v.5"/>',
+};
+
+function fecharAvisoCriado() {
+    clearTimeout(temporizadorAviso);
+    if (avisoCriado.matches(":popover-open")) {
+        avisoCriado.hidePopover();
+    }
 }
+
+function mostrarMensagem(texto, tipo) {
+    fecharAvisoCriado();
+    tipo = tipo === "erro" ? "erro" : "sucesso";
+    avisoCriado.className = tipo;
+    document.getElementById("aviso-criado-texto").textContent = texto;
+    document.getElementById("aviso-criado-icone").innerHTML = ICONE_AVISO[tipo];
+    // A caixinha fica centrada na linha que divide o cabeçalho do resto da página
+    const cabecalho = document.querySelector(".cabecalho");
+    const linha = cabecalho ? cabecalho.getBoundingClientRect().bottom : 0;
+    avisoCriado.style.top = Math.max(linha, 40) + "px";
+    avisoCriado.showPopover();
+    // erro fica um pouco mais, porque a pessoa precisa ler o que aconteceu
+    temporizadorAviso = setTimeout(fecharAvisoCriado, tipo === "erro" ? 5000 : 2500);
+}
+
+document.getElementById("btn-fechar-aviso").addEventListener("click", fecharAvisoCriado);
 
 // Pergunta "tem certeza?" numa janela. Devolve true (confirmou) ou false.
 // Uso:  if (await confirmar("Título", "Texto", "Botão")) { ... }
@@ -318,11 +334,101 @@ function desenharKanban(tickets) {
     }
 }
 
-// Cria o card de um ticket: #ID, prioridade, título e responsável
+// ---------- Arrastar e soltar (drag and drop nativo do navegador) ----------
+// O navegador já sabe arrastar elementos; nós só dizemos QUEM pode ser arrastado
+// (draggable) e O QUE fazer quando soltar numa coluna (evento "drop").
+// Quem decide de verdade se o movimento vale é o backend: aqui só evitamos
+// mostrar como possível o que o servidor vai recusar.
+let ticketArrastado = null;   // ticket que está sendo arrastado agora (ou null)
+
+// Só dá para soltar nas etapas que o backend liberou para este usuário neste ticket
+function podeSoltar(ticket, etapaDestino) {
+    return ticket.permissoes.destinos.includes(etapaDestino);
+}
+
+// A coluna inteira (título + cards) é a área onde se solta
+function colunaDaEtapa(etapa) {
+    return document.getElementById("cards-" + etapa).parentElement;
+}
+
+function iniciarArrasto(evento, card, ticket) {
+    ticketArrastado = ticket;
+    evento.dataTransfer.effectAllowed = "move";
+    evento.dataTransfer.setData("text/plain", String(ticket.id));  // o Firefox exige algum dado
+
+    // Escurece as colunas onde NÃO dá para soltar, para o usuário ver onde pode
+    for (const etapa of Object.keys(NOMES_ETAPAS)) {
+        if (etapa !== ticket.etapa && !podeSoltar(ticket, etapa)) {
+            colunaDaEtapa(etapa).classList.add("destino-bloqueado");
+        }
+    }
+    // setTimeout: se o card ficasse transparente já agora, a "sombra" arrastada também ficaria
+    setTimeout(function () { card.classList.add("arrastando"); }, 0);
+}
+
+function terminarArrasto(card) {
+    ticketArrastado = null;
+    card.classList.remove("arrastando");
+    for (const etapa of Object.keys(NOMES_ETAPAS)) {
+        colunaDaEtapa(etapa).classList.remove("destino-bloqueado", "destino-ativo");
+    }
+}
+
+// Liga os eventos de "soltar" em cada coluna (roda uma vez, quando a página carrega)
+function configurarColunas() {
+    for (const etapa of Object.keys(NOMES_ETAPAS)) {
+        const coluna = colunaDaEtapa(etapa);
+
+        // dragover dispara o tempo todo enquanto o card está em cima da coluna.
+        // Só quando chamamos preventDefault() o navegador aceita soltar ali.
+        coluna.addEventListener("dragover", function (evento) {
+            if (ticketArrastado && podeSoltar(ticketArrastado, etapa)) {
+                evento.preventDefault();
+                coluna.classList.add("destino-ativo");
+            }
+        });
+        coluna.addEventListener("dragleave", function (evento) {
+            // dragleave também dispara ao passar por cima de um filho da coluna: ignoramos isso
+            if (!coluna.contains(evento.relatedTarget)) {
+                coluna.classList.remove("destino-ativo");
+            }
+        });
+        coluna.addEventListener("drop", function (evento) {
+            evento.preventDefault();
+            coluna.classList.remove("destino-ativo");
+            const ticket = ticketArrastado;
+            if (ticket && podeSoltar(ticket, etapa)) {
+                moverTicket(ticket, etapa);   // a mesma função dos botões: o backend valida
+            }
+        });
+    }
+}
+
+// Cria o card de um ticket: #ID, prioridade, título e quem criou.
+// É uma <div role="button"> (e não <button>) porque o Firefox não arrasta <button>.
 function criarCard(ticket) {
-    const card = document.createElement("button");
-    card.type = "button";
+    const card = document.createElement("div");
     card.className = "card";
+    card.setAttribute("role", "button");
+    card.tabIndex = 0;                // dá para chegar nele com a tecla Tab
+    card.title = ticket.titulo;       // título completo ao passar o mouse (no card ele pode ser cortado)
+
+    // Todo card pode ser "pego", mas só se move quem tem permissão (suporte) e se o
+    // ticket não estiver concluído. Nos outros casos cancelamos o arrasto e explicamos o motivo.
+    card.draggable = true;
+    if (ticket.permissoes.mover) {
+        card.classList.add("movel");   // só estes mostram a mãozinha de "pegar" no CSS
+        card.addEventListener("dragstart", function (evento) { iniciarArrasto(evento, card, ticket); });
+        card.addEventListener("dragend", function () { terminarArrasto(card); });
+    } else {
+        card.addEventListener("dragstart", function (evento) {
+            evento.preventDefault();   // cancela o arrasto antes de começar
+            const motivo = ticket.etapa === "concluido"
+                ? "Ticket concluído não pode mais ser movido."
+                : "Você só pode mover os seus tickets, e só quando estiverem em Stage.";
+            mostrarMensagem(motivo, "erro");
+        });
+    }
 
     const topo = document.createElement("span");
     topo.className = "card-topo";
@@ -344,10 +450,35 @@ function criarCard(ticket) {
     criador.className = "card-criador";
     criador.textContent = "Criado por: " + ticket.criador_nome;
 
-    card.append(topo, titulo, criador);
+    // Rodapé do card: quem criou (esquerda) e quantos comentários tem (direita)
+    const rodape = document.createElement("span");
+    rodape.className = "card-rodape";
+    rodape.appendChild(criador);
+
+    if (ticket.total_comentarios > 0) {
+        const comentarios = document.createElement("span");
+        comentarios.className = "card-comentarios";
+        comentarios.title = ticket.total_comentarios + (ticket.total_comentarios === 1 ? " comentário" : " comentários");
+        comentarios.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" ' +
+            'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+            ICONES.balao + '</svg>';
+        const numero = document.createElement("span");
+        numero.textContent = ticket.total_comentarios;
+        comentarios.appendChild(numero);
+        rodape.appendChild(comentarios);
+    }
+
+    card.append(topo, titulo, rodape);
 
     card.addEventListener("click", function () {
         abrirDetalhe(ticket.id);
+    });
+    // Como não é um <button>, Enter e Espaço precisam ser ligados à mão
+    card.addEventListener("keydown", function (evento) {
+        if (evento.key === "Enter" || evento.key === " ") {
+            evento.preventDefault();
+            abrirDetalhe(ticket.id);
+        }
     });
     return card;
 }
@@ -357,6 +488,15 @@ function escolherAba(soMeus) {
     mostrarSoMeus = soMeus;
     document.getElementById("aba-meus").setAttribute("aria-pressed", String(soMeus));
     document.getElementById("aba-todos").setAttribute("aria-pressed", String(!soMeus));
+
+    // "Criado por" não faz sentido em "Meus tickets" (todos são meus): esconde o filtro
+    // e zera o valor, senão ele continuaria filtrando sem aparecer na tela.
+    const filtroCriador = document.getElementById("filtro-criador");
+    filtroCriador.parentElement.hidden = soMeus;
+    if (soMeus) {
+        filtroCriador.value = "";
+        atualizarEstadoDosFiltros();
+    }
     carregarTickets();
 }
 document.getElementById("aba-meus").addEventListener("click", function () {
@@ -366,13 +506,47 @@ document.getElementById("aba-todos").addEventListener("click", function () {
     escolherAba(false);
 });
 
-// --- Filtros ---
+// --- Filtros (aplicam na hora, sem botão "Buscar") ---
+const campoBusca = document.getElementById("filtro-busca");
+const selectsDeFiltro = [document.getElementById("filtro-prioridade"), document.getElementById("filtro-criador")];
+
+// Destaca o filtro que está ligado e mostra "Limpar filtros" só quando há algum
+function atualizarEstadoDosFiltros() {
+    let algumLigado = campoBusca.value.trim() !== "";
+    for (const select of selectsDeFiltro) {
+        const ligado = select.value !== "";
+        select.parentElement.classList.toggle("ativo", ligado);
+        if (ligado) algumLigado = true;
+    }
+    document.getElementById("btn-limpar-filtros").hidden = !algumLigado;
+}
+
+// Digitar: espera 300 ms depois da última tecla, para não consultar o servidor a cada letra
+let temporizadorBusca = null;
+campoBusca.addEventListener("input", function () {
+    clearTimeout(temporizadorBusca);
+    temporizadorBusca = setTimeout(function () {
+        atualizarEstadoDosFiltros();
+        carregarTickets();
+    }, 300);
+});
+
+// Trocar um select: aplica na hora
+for (const select of selectsDeFiltro) {
+    select.addEventListener("change", function () {
+        atualizarEstadoDosFiltros();
+        carregarTickets();
+    });
+}
+
+// Enter dentro da busca não deve recarregar a página
 document.getElementById("form-filtros").addEventListener("submit", function (evento) {
     evento.preventDefault();
-    carregarTickets();
 });
+
 document.getElementById("btn-limpar-filtros").addEventListener("click", function () {
     document.getElementById("form-filtros").reset();
+    atualizarEstadoDosFiltros();
     carregarTickets();
 });
 
@@ -401,6 +575,7 @@ async function abrirDetalhe(id) {
 
     desenharAcoes(ticket);
     desenharHistorico(resposta.dados.historico);
+    desenharComentarios(resposta.dados.comentarios, ticket.permissoes.comentar);
 
     if (!dialogDetalhe.open) {
         dialogDetalhe.showModal();
@@ -414,6 +589,9 @@ const ICONES = {
     lapis: '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>',
     lixeira: '<path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/>',
     fechar: '<path d="M18 6 6 18"/><path d="M6 6l12 12"/>',
+    // três bolinhas cheias na vertical (fill + stroke="none": o traço do ícone não vira contorno)
+    pontos: '<circle cx="12" cy="5" r="1.8" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.8" fill="currentColor" stroke="none"/><circle cx="12" cy="19" r="1.8" fill="currentColor" stroke="none"/>',
+    balao: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
 };
 
 // Troca o texto do botão por um ícone. O "rotulo" vira aria-label (leitor de tela)
@@ -451,8 +629,9 @@ function desenharAcoes(ticket) {
     areaTopo.replaceChildren();
 
     if (ticket.permissoes.mover) {
-        const anterior = VOLTAR[ticket.etapa];
-        const proxima = AVANCAR[ticket.etapa];
+        // Só mostra os botões para destinos que o backend liberou a este usuário
+        const anterior = ticket.permissoes.destinos.includes(VOLTAR[ticket.etapa]) ? VOLTAR[ticket.etapa] : null;
+        const proxima = ticket.permissoes.destinos.includes(AVANCAR[ticket.etapa]) ? AVANCAR[ticket.etapa] : null;
 
         if (anterior) {
             area.appendChild(criarBotaoAcao("← Voltar para " + NOMES_ETAPAS[anterior], "secundario",
@@ -475,7 +654,21 @@ function desenharAcoes(ticket) {
 }
 
 // Move o ticket. Só concluir pede confirmação (é a ação de maior impacto do fluxo).
+let movendoTicket = false;   // true enquanto uma movimentação está em andamento
+
 async function moverTicket(ticket, novaEtapa) {
+    // Se o servidor ainda está respondendo ao movimento anterior, ignora o novo.
+    // (Sem isso, soltar o card duas vezes seguidas manda um movimento já inválido.)
+    if (movendoTicket) return;
+    movendoTicket = true;
+    try {
+        await executarMovimento(ticket, novaEtapa);
+    } finally {
+        movendoTicket = false;
+    }
+}
+
+async function executarMovimento(ticket, novaEtapa) {
     if (novaEtapa === "concluido") {
         const confirmou = await confirmar(
             "Concluir ticket?",
@@ -484,13 +677,44 @@ async function moverTicket(ticket, novaEtapa) {
         if (!confirmou) return;
     }
 
-    const resposta = await chamarApi("/api/tickets/" + ticket.id + "/etapa", "PUT", { etapa: novaEtapa });
+    const corpo = { etapa: novaEtapa };
+    if (ticket.etapa === "stage" && novaEtapa === "andamento") {
+        const motivo = await pedirMotivoDaDevolucao();
+        if (motivo === null) return;
+        corpo.motivo = motivo;
+    }
+
+    const resposta = await chamarApi("/api/tickets/" + ticket.id + "/etapa", "PUT", corpo);
     if (!resposta.ok) {
         mostrarMensagem(resposta.dados.erro, "erro");
+        await atualizarTela();   // a tela estava desatualizada: recarrega para mostrar a situação real
         return;
     }
-    mostrarMensagem("Ticket movido para " + NOMES_ETAPAS[novaEtapa] + ".", "sucesso");
+    // Qualquer movimentação feita pela janela de detalhes fecha a janela e volta ao Kanban,
+    // onde já dá para ver o card na nova coluna.
+    if (dialogDetalhe.open) {
+        dialogDetalhe.close();
+    }
+    // Só concluir ganha aviso: as outras movimentações já se veem no próprio Kanban.
+    if (novaEtapa === "concluido") {
+        mostrarMensagem("Ticket concluído com sucesso!", "sucesso");
+    }
     await atualizarTela();
+}
+
+// Abre a janela do motivo. Devolve o texto digitado, ou null se a pessoa cancelou.
+function pedirMotivoDaDevolucao() {
+    const dialogo = document.getElementById("dialog-devolver");
+    const campo = document.getElementById("devolver-motivo");
+    campo.value = "";
+    dialogo.returnValue = "";
+    dialogo.showModal();
+    campo.focus();
+    return new Promise(function (resolver) {
+        dialogo.addEventListener("close", function () {
+            resolver(dialogo.returnValue === "ok" ? campo.value.trim() : null);
+        }, { once: true });
+    });
 }
 
 async function excluirTicket(ticket) {
@@ -530,6 +754,9 @@ function textoDoHistorico(registro) {
             // valor_novo guarda o nome da pessoa quando o suporte abriu em nome dela
             return para ? "criou o ticket em nome de " + para : "criou o ticket";
         case "etapa":
+            if (de === "stage" && para === "andamento") {
+                return "devolveu o ticket de Stage para Em andamento";
+            }
             return "moveu de " + NOMES_ETAPAS[de] + " para " + NOMES_ETAPAS[para];
         case "concluido":
             return "concluiu o ticket";
@@ -567,6 +794,216 @@ function desenharHistorico(historico) {
 colocarIcone(document.getElementById("btn-fechar-detalhe"), "fechar", "Fechar");
 document.getElementById("btn-fechar-detalhe").addEventListener("click", function () {
     dialogDetalhe.close();
+});
+
+
+// Guardamos a última lista desenhada para poder redesenhar (ex.: ao cancelar uma edição)
+let comentariosAtuais = [];
+let podeComentarAtual = false;
+
+// Enter envia o formulário do campo; Shift+Enter quebra a linha (como em chats e redes sociais).
+// isComposing: não envia enquanto a pessoa está montando um acento/caractere no teclado.
+function enviarComEnter(campo, botaoEnviar) {
+    campo.addEventListener("keydown", function (evento) {
+        if (evento.key === "Enter" && !evento.shiftKey && !evento.isComposing) {
+            evento.preventDefault();       // sem isso o Enter inseriria uma quebra de linha
+            // dispara o submit normal (inclusive a validação do "required").
+            // botaoEnviar: em <form method="dialog"> é o botão enviado que define o returnValue.
+            campo.form.requestSubmit(botaoEnviar);
+        }
+    });
+}
+enviarComEnter(document.getElementById("comentario-texto"));
+enviarComEnter(document.getElementById("devolver-motivo"),
+               document.querySelector("#dialog-devolver button[value=ok]"));
+
+// Lista os comentários (do mais antigo ao mais novo) e mostra o formulário só se puder comentar
+function desenharComentarios(comentarios, podeComentar) {
+    comentariosAtuais = comentarios;
+    podeComentarAtual = podeComentar;
+
+    const lista = document.getElementById("lista-comentarios");
+    lista.replaceChildren();
+    document.getElementById("contador-comentarios").textContent = comentarios.length;
+
+    for (const comentario of comentarios) {
+        const item = document.createElement("li");
+
+        const cabecalho = document.createElement("div");
+        cabecalho.className = "comentario-cabecalho";
+
+        const info = document.createElement("span");
+        const autor = document.createElement("strong");
+        autor.textContent = comentario.usuario_nome;      // textContent: nunca interpreta HTML
+        info.append(autor, " · " + formatarData(comentario.criado_em));
+        if (comentario.editado_em) {
+            const editado = document.createElement("span");
+            editado.textContent = " · editado";
+            editado.title = "Editado em " + formatarData(comentario.editado_em);
+            info.appendChild(editado);
+        }
+        cabecalho.appendChild(info);
+
+        const texto = document.createElement("p");
+        texto.textContent = comentario.texto;
+
+        // O menu de três pontinhos só existe para quem pode editar ou excluir este comentário
+        if (comentario.permissoes.editar || comentario.permissoes.excluir) {
+            cabecalho.appendChild(criarMenuDoComentario(comentario, item, texto));
+        }
+
+        item.append(cabecalho, texto);
+        lista.appendChild(item);
+    }
+
+    document.getElementById("form-comentario").hidden = !podeComentar;
+    document.getElementById("comentario-aviso").hidden = podeComentar;
+}
+
+// Fecha os menus abertos (menos o indicado). Chamado ao abrir outro menu ou clicar fora.
+function fecharMenusDeComentario(exceto) {
+    for (const menu of document.querySelectorAll(".comentario-menu")) {
+        if (menu !== exceto && !menu.hidden) {
+            menu.hidden = true;
+            menu.previousElementSibling.setAttribute("aria-expanded", "false");
+        }
+    }
+}
+document.addEventListener("click", function (evento) {
+    if (!evento.target.closest(".comentario-opcoes")) {
+        fecharMenusDeComentario(null);
+    }
+});
+
+// Botão "…" com o menu Editar / Excluir
+function criarMenuDoComentario(comentario, item, paragrafoTexto) {
+    const area = document.createElement("div");
+    area.className = "comentario-opcoes";
+
+    const botao = document.createElement("button");
+    botao.type = "button";
+    botao.className = "secundario discreto";
+    botao.setAttribute("aria-haspopup", "menu");
+    botao.setAttribute("aria-expanded", "false");
+    colocarIcone(botao, "pontos", "Opções do comentário");
+
+    const menu = document.createElement("div");
+    menu.className = "comentario-menu";
+    menu.setAttribute("role", "menu");
+    menu.hidden = true;
+
+    if (comentario.permissoes.editar) {
+        const editar = document.createElement("button");
+        editar.type = "button";
+        editar.setAttribute("role", "menuitem");
+        editar.textContent = "Editar";
+        editar.addEventListener("click", function () {
+            fecharMenusDeComentario(null);
+            iniciarEdicaoDeComentario(comentario, item, paragrafoTexto);
+        });
+        menu.appendChild(editar);
+    }
+    if (comentario.permissoes.excluir) {
+        const excluir = document.createElement("button");
+        excluir.type = "button";
+        excluir.className = "perigo-texto";
+        excluir.setAttribute("role", "menuitem");
+        excluir.textContent = "Excluir";
+        excluir.addEventListener("click", function () {
+            fecharMenusDeComentario(null);
+            excluirComentario(comentario);
+        });
+        menu.appendChild(excluir);
+    }
+
+    botao.addEventListener("click", function () {
+        const abrir = menu.hidden;
+        fecharMenusDeComentario(menu);   // fecha qualquer outro que esteja aberto
+        menu.hidden = !abrir;
+        botao.setAttribute("aria-expanded", String(abrir));
+    });
+
+    area.append(botao, menu);
+    return area;
+}
+
+// Troca o texto do comentário por uma caixa de edição (no próprio lugar)
+function iniciarEdicaoDeComentario(comentario, item, paragrafoTexto) {
+    const form = document.createElement("form");
+    form.className = "form-comentario";
+
+    const campo = document.createElement("textarea");
+    campo.rows = 3;
+    campo.maxLength = 1000;
+    campo.required = true;
+    campo.value = comentario.texto;
+    campo.setAttribute("aria-label", "Editar comentário");
+
+    const botoes = document.createElement("div");
+    botoes.className = "botoes";
+    botoes.style.marginTop = "0";
+    const cancelar = document.createElement("button");
+    cancelar.type = "button";
+    cancelar.className = "secundario";
+    cancelar.textContent = "Cancelar";
+    cancelar.addEventListener("click", function () {
+        desenharComentarios(comentariosAtuais, podeComentarAtual);   // volta ao texto original
+    });
+    const salvar = document.createElement("button");
+    salvar.type = "submit";
+    salvar.textContent = "Salvar";
+    botoes.append(cancelar, salvar);
+
+    form.append(campo, botoes);
+    form.addEventListener("submit", async function (evento) {
+        evento.preventDefault();
+        salvar.disabled = true;
+        const resposta = await chamarApi("/api/comentarios/" + comentario.id, "PUT", { texto: campo.value });
+        if (!resposta.ok) {
+            salvar.disabled = false;
+            mostrarMensagem(resposta.dados.erro, "erro");
+            return;
+        }
+        await atualizarTela();
+    });
+
+    paragrafoTexto.replaceWith(form);
+    enviarComEnter(campo);   // na edição também: Enter salva, Shift+Enter quebra a linha
+    campo.focus();
+}
+
+async function excluirComentario(comentario) {
+    const confirmou = await confirmar(
+        "Excluir comentário?",
+        "O comentário deixará de aparecer neste ticket.",
+        "Excluir",
+        true);
+    if (!confirmou) return;
+
+    const resposta = await chamarApi("/api/comentarios/" + comentario.id, "DELETE");
+    if (!resposta.ok) {
+        mostrarMensagem(resposta.dados.erro, "erro");
+        return;
+    }
+    await atualizarTela();
+}
+
+document.getElementById("form-comentario").addEventListener("submit", async function (evento) {
+    evento.preventDefault();
+    const campo = document.getElementById("comentario-texto");
+    const botao = document.getElementById("btn-comentar");
+
+    botao.disabled = true;
+    const resposta = await chamarApi(
+        "/api/tickets/" + ticketAbertoId + "/comentarios", "POST", { texto: campo.value });
+    botao.disabled = false;
+
+    if (!resposta.ok) {
+        mostrarMensagem(resposta.dados.erro, "erro");
+        return;
+    }
+    campo.value = "";
+    await atualizarTela();   // o comentário novo aparece na lista e o contador do card sobe
 });
 
 
@@ -639,7 +1076,11 @@ document.getElementById("form-ticket").addEventListener("submit", async function
     }
 
     dialogTicket.close();
-    mostrarMensagem(ticketEditandoId === null ? "Ticket criado no Backlog." : "Ticket atualizado.", "sucesso");
+    if (ticketEditandoId === null) {
+        mostrarMensagem("Ticket criado com sucesso!", "sucesso");
+    } else {
+        mostrarMensagem("Ticket atualizado.", "sucesso");
+    }
     await atualizarTela();
 });
 
@@ -657,4 +1098,5 @@ async function iniciar() {
     }
 }
 
+configurarColunas();
 iniciar();

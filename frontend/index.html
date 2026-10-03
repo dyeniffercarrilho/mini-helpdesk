@@ -16,7 +16,6 @@
                 <span id="usuario-nome"></span>
                 <span id="usuario-perfil" class="selo"></span>
             </p>
-            <button type="button" id="btn-novo-ticket">+ Novo ticket</button>
             <button type="button" id="btn-sair" class="secundario">Sair</button>
         </div>
     </header>
@@ -72,35 +71,53 @@
         <section id="tela-kanban" hidden>
 
             <div class="barra">
-                <!-- Alternar entre "Meus tickets" e "Todos os tickets" -->
-                <div class="abas" role="group" aria-label="Quais tickets mostrar">
-                    <button type="button" id="aba-meus" aria-pressed="false">Meus tickets</button>
-                    <button type="button" id="aba-todos" aria-pressed="true">Todos os tickets</button>
+                <!-- Esquerda: abas + criar ticket (a ação principal fica junto do quadro) -->
+                <div class="barra-esquerda">
+                    <div class="abas" role="group" aria-label="Quais tickets mostrar">
+                        <button type="button" id="aba-meus" aria-pressed="false">Meus tickets</button>
+                        <button type="button" id="aba-todos" aria-pressed="true">Todos os tickets</button>
+                    </div>
+                    <button type="button" id="btn-novo-ticket">+ Novo ticket</button>
                 </div>
 
-                <!-- Filtros -->
+                <!-- Direita: filtros. Aplicam na hora, sem botão "Buscar". -->
                 <form id="form-filtros" class="filtros">
-                    <div>
-                        <label for="filtro-busca">Buscar</label>
-                        <input type="search" id="filtro-busca" placeholder="Título ou descrição" maxlength="100">
+                    <span class="filtros-titulo">
+                        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor"
+                             stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <polygon points="22 3 2 3 10 12.5 10 19 14 21 14 12.5 22 3"/>
+                        </svg>
+                        Filtrar por
+                    </span>
+
+                    <div class="campo-busca">
+                        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor"
+                             stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/>
+                        </svg>
+                        <input type="search" id="filtro-busca" placeholder="Título ou descrição"
+                               aria-label="Buscar por título ou descrição" maxlength="100">
                     </div>
-                    <div>
-                        <label for="filtro-prioridade">Prioridade</label>
+
+                    <label class="filtro-pill" for="filtro-prioridade">
+                        <span>Prioridade</span>
                         <select id="filtro-prioridade">
                             <option value="">Todas</option>
                             <option value="alta">Alta</option>
                             <option value="media">Média</option>
                             <option value="baixa">Baixa</option>
                         </select>
-                    </div>
-                    <div>
-                        <label for="filtro-criador">Criado por</label>
+                    </label>
+
+                    <label class="filtro-pill" for="filtro-criador">
+                        <span>Criado por</span>
                         <select id="filtro-criador">
                             <option value="">Todos</option>
                         </select>
-                    </div>
-                    <button type="submit">Buscar</button>
-                    <button type="button" id="btn-limpar-filtros" class="secundario">Limpar</button>
+                    </label>
+
+                    <!-- Só aparece quando há algum filtro ligado -->
+                    <button type="button" id="btn-limpar-filtros" class="link" hidden>Limpar</button>
                 </form>
             </div>
 
@@ -184,6 +201,19 @@
                     <dt>Atualizado em</dt><dd id="detalhe-atualizado-em"></dd>
                 </dl>
                 <div id="detalhe-acoes" class="acoes-detalhe"></div>
+
+                <!-- Comentários: conversa sobre o ticket (separada do histórico, que é o registro automático) -->
+                <section class="comentarios" aria-labelledby="titulo-comentarios">
+                    <h3 id="titulo-comentarios">Comentários <span class="contador" id="contador-comentarios">0</span></h3>
+                    <ul id="lista-comentarios" class="lista-comentarios"></ul>
+                    <form id="form-comentario" class="form-comentario">
+                        <label for="comentario-texto" class="so-leitor">Novo comentário</label>
+                        <textarea id="comentario-texto" rows="2" maxlength="1000"
+                                  placeholder="Escreva um comentário (Shift+Enter quebra a linha)" required></textarea>
+                        <button type="submit" id="btn-comentar">Comentar</button>
+                    </form>
+                    <p id="comentario-aviso" class="dica" hidden>Ticket concluído: não recebe mais comentários.</p>
+                </section>
             </section>
             <section class="detalhe-historico" aria-labelledby="titulo-historico">
                 <h3 id="titulo-historico">Histórico</h3>
@@ -205,9 +235,33 @@
         </form>
     </dialog>
 
-    <!-- Mensagens de sucesso e erro. popover="manual" faz o aviso aparecer
-         por cima de qualquer janela aberta. -->
-    <div id="mensagem" popover="manual" role="status" aria-live="polite"></div>
+    <!-- Devolução de Stage para Em andamento: o motivo é obrigatório e vira um comentário. -->
+    <dialog id="dialog-devolver" aria-labelledby="devolver-titulo">
+        <form method="dialog" id="form-devolver">
+            <h2 id="devolver-titulo">Devolver para Em andamento</h2>
+            <p id="devolver-texto">Conte o que não passou no teste. O motivo ficará registrado nos comentários do ticket.</p>
+            <textarea id="devolver-motivo" rows="4" maxlength="960" placeholder="Motivo da devolução" required></textarea>
+            <div class="botoes">
+                <button type="submit" value="cancelar" class="secundario" formnovalidate>Cancelar</button>
+                <button type="submit" value="ok">Devolver</button>
+            </div>
+        </form>
+    </dialog>
+
+    <!-- Aviso único do sistema (sucesso ou erro): no alto da tela, some sozinho, e o X fecha na hora -->
+    <div id="aviso-criado" popover="manual" role="status" aria-live="polite">
+        <svg class="aviso-icone" id="aviso-criado-icone-svg" viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor"
+             stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <g id="aviso-criado-icone"></g>
+        </svg>
+        <span id="aviso-criado-texto"></span>
+        <button type="button" id="btn-fechar-aviso" class="secundario" aria-label="Fechar aviso" title="Fechar">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M18 6 6 18"/><path d="M6 6l12 12"/>
+            </svg>
+        </button>
+    </div>
 
     <script src="/app.js"></script>
 </body>

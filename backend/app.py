@@ -12,12 +12,15 @@ Rotas da API:
   POST   /api/login                 entra no sistema
   POST   /api/logout                sai do sistema
   GET    /api/eu                    dados de quem está logado
-  GET    /api/usuarios              lista de usuários (para escolher o responsável)
+  GET    /api/usuarios              lista de usuários (para o filtro e o responsável)
   GET    /api/tickets               lista tickets (aceita filtros na URL)
   POST   /api/tickets               cria ticket
-  GET    /api/tickets/<id>          detalhes + histórico
+  GET    /api/tickets/<id>          detalhes + histórico + comentários
   PUT    /api/tickets/<id>          edita ticket
   PUT    /api/tickets/<id>/etapa    move o ticket de etapa
+  POST   /api/tickets/<id>/comentarios  comenta num ticket
+  PUT    /api/comentarios/<id>      edita um comentário (só o autor)
+  DELETE /api/comentarios/<id>      exclui (esconde) um comentário
   DELETE /api/tickets/<id>          exclui (esconde) um ticket do Backlog
 
 Variáveis de ambiente necessárias (veja .env.example):
@@ -62,6 +65,8 @@ PRIORIDADES = ["baixa", "media", "alta"]
 
 # Para onde um ticket pode ir a partir de cada etapa (nada de pular etapas).
 # De "concluido" não se sai: concluído é o fim do fluxo.
+PREFIXO_DEVOLUCAO = "Devolvido para Em andamento. Motivo: "
+
 MOVIMENTOS_PERMITIDOS = {
     "backlog": ["andamento"],
     "andamento": ["backlog", "stage"],
@@ -74,6 +79,7 @@ MOVIMENTOS_PERMITIDOS = {
 SQL_TICKET = """
     SELECT t.id, t.titulo, t.descricao, t.prioridade, t.etapa,
            t.criado_por, c.nome AS criador_nome,
+           (SELECT COUNT(*) FROM comentarios k WHERE k.ticket_id = t.id AND k.excluido = FALSE) AS total_comentarios,
            t.criado_em, t.atualizado_em
     FROM tickets t
     JOIN usuarios c ON c.id = t.criado_por
@@ -178,9 +184,26 @@ def eh_suporte(usuario):
     return usuario["perfil"] == "suporte"
 
 
+def etapas_de_destino(usuario, ticket):
+    """
+    Para onde ESTE usuário pode mandar o ticket agora.
+    - Suporte: as etapas vizinhas (menos em ticket concluído).
+    - Quem criou o ticket (comum): só quando ele está em Stage, que é a hora de
+      testar: pode concluir (aprovou) ou devolver para Em andamento (reprovou).
+    """
+    etapa = ticket["etapa"]
+    if etapa == "concluido":
+        return []
+    if eh_suporte(usuario):
+        return list(MOVIMENTOS_PERMITIDOS[etapa])
+    if etapa == "stage" and ticket["criado_por"] == usuario["id"]:
+        return list(MOVIMENTOS_PERMITIDOS[etapa])
+    return []
+
+
 def pode_mover(usuario, ticket):
-    """Mover pelo fluxo: só a equipe de suporte, que é quem atende."""
-    return eh_suporte(usuario)
+    """Pode mexer no fluxo se tem pelo menos um destino possível."""
+    return len(etapas_de_destino(usuario, ticket)) > 0
 
 
 def pode_editar(usuario, ticket):
@@ -199,6 +222,31 @@ def pode_excluir(usuario, ticket):
     return eh_suporte(usuario) or ticket["criado_por"] == usuario["id"]
 
 
+def pode_comentar(usuario, ticket):
+    """Qualquer pessoa logada comenta (todos já veem todos os tickets), exceto em ticket concluído."""
+    return ticket["etapa"] != "concluido"
+
+
+def buscar_comentario(conn, comentario_id):
+    """Comentário ainda visível, junto da etapa do ticket (que define se ainda dá para mexer nele)."""
+    return conn.execute(
+        "SELECT k.id, k.usuario_id, k.texto, t.etapa "
+        "FROM comentarios k JOIN tickets t ON t.id = k.ticket_id "
+        "WHERE k.id = %s AND k.excluido = FALSE AND t.excluido = FALSE",
+        (comentario_id,),
+    ).fetchone()
+
+
+def pode_editar_comentario(usuario, comentario):
+    """Só o autor edita, e só enquanto o ticket não está concluído."""
+    return comentario["usuario_id"] == usuario["id"] and comentario["etapa"] != "concluido"
+
+
+def pode_excluir_comentario(usuario, comentario):
+    """Cada pessoa exclui só os próprios comentários (suporte também), e não em ticket concluído."""
+    return comentario["usuario_id"] == usuario["id"] and comentario["etapa"] != "concluido"
+
+
 def ticket_para_json(ticket, usuario):
     """
     Devolve o ticket com a lista do que ESTE usuário pode fazer nele.
@@ -206,11 +254,13 @@ def ticket_para_json(ticket, usuario):
     Quem realmente protege é o backend, que confere de novo em cada ação.
     """
     ticket = dict(ticket)
-    pode_fluxo = pode_mover(usuario, ticket)
+    destinos = etapas_de_destino(usuario, ticket)
     ticket["permissoes"] = {
-        "mover": pode_fluxo and ticket["etapa"] != "concluido",
+        "mover": len(destinos) > 0,
+        "destinos": destinos,
         "editar": pode_editar(usuario, ticket),
         "excluir": pode_excluir(usuario, ticket),
+        "comentar": pode_comentar(usuario, ticket),
     }
     return ticket
 
@@ -447,7 +497,24 @@ def detalhe_ticket(ticket_id):
         (ticket_id,),
     ).fetchall()
 
-    return jsonify({"ticket": ticket_para_json(ticket, g.usuario), "historico": historico})
+    # Comentários do mais antigo para o mais novo (como numa conversa)
+    comentarios = conn.execute(
+        "SELECT k.id, k.usuario_id, k.texto, k.criado_em, k.editado_em, "
+        "       u.nome AS usuario_nome "
+        "FROM comentarios k JOIN usuarios u ON u.id = k.usuario_id "
+        "WHERE k.ticket_id = %s AND k.excluido = FALSE ORDER BY k.id",
+        (ticket_id,),
+    ).fetchall()
+    # Diz a cada comentário o que ESTE usuário pode fazer nele (o frontend só mostra/esconde o menu)
+    for comentario in comentarios:
+        dados_para_regra = {"usuario_id": comentario.pop("usuario_id"), "etapa": ticket["etapa"]}
+        comentario["permissoes"] = {
+            "editar": pode_editar_comentario(g.usuario, dados_para_regra),
+            "excluir": pode_excluir_comentario(g.usuario, dados_para_regra),
+        }
+
+    return jsonify({"ticket": ticket_para_json(ticket, g.usuario),
+                    "historico": historico, "comentarios": comentarios})
 
 
 @app.put("/api/tickets/<int:ticket_id>")
@@ -490,19 +557,36 @@ def mover_ticket(ticket_id):
     ticket = buscar_ticket(conn, ticket_id)
     if ticket is None:
         return erro("Ticket não encontrado.", 404)
+    etapa_atual = ticket["etapa"]
+    if etapa_atual == "concluido":
+        return erro("Ticket concluído não pode mais ser movido.", 400)
     if not pode_mover(g.usuario, ticket):
-        return erro("Só a equipe de suporte pode mover tickets.", 403)
+        if eh_suporte(g.usuario):
+            return erro("Você não pode mover este ticket.", 403)
+        return erro("Você só pode mover os seus tickets, e só quando estiverem em Stage.", 403)
 
     dados = ler_corpo()
     nova_etapa = dados.get("etapa") if dados else None
     if nova_etapa not in ETAPAS:
         return erro("Etapa inválida.", 400)
 
-    etapa_atual = ticket["etapa"]
-    if etapa_atual == "concluido":
-        return erro("Ticket concluído não pode mais ser movido.", 400)
+    if nova_etapa == etapa_atual:
+        return erro("O ticket já está nessa etapa.", 400)
     if nova_etapa not in MOVIMENTOS_PERMITIDOS[etapa_atual]:
         return erro("Movimento não permitido: não é possível pular etapas.", 400)
+    if nova_etapa not in etapas_de_destino(g.usuario, ticket):
+        return erro("Você não tem permissão para esse movimento.", 403)
+
+    # Devolver de Stage para Em andamento exige o motivo (vira um comentário do ticket).
+    texto_motivo = None
+    if etapa_atual == "stage" and nova_etapa == "andamento":
+        motivo = dados.get("motivo")
+        motivo = motivo.strip() if isinstance(motivo, str) else ""
+        if not motivo:
+            return erro("Explique o motivo da devolução.", 400)
+        texto_motivo = PREFIXO_DEVOLUCAO + motivo
+        if len(texto_motivo) > 1000:
+            return erro("O motivo está longo demais. Resuma um pouco.", 400)
 
     # TRANSAÇÃO: atualizar a etapa + gravar no histórico.
     # "AND etapa = etapa_atual" evita conflito: se outra pessoa moveu o ticket
@@ -516,8 +600,81 @@ def mover_ticket(ticket_id):
 
     acao = "concluido" if nova_etapa == "concluido" else "etapa"
     registrar_historico(conn, ticket_id, acao, etapa_atual, nova_etapa)
+    if texto_motivo:
+        conn.execute(
+            "INSERT INTO comentarios (ticket_id, usuario_id, texto) VALUES (%s, %s, %s)",
+            (ticket_id, g.usuario["id"], texto_motivo),
+        )
     conn.commit()
 
+    return jsonify({"ok": True})
+
+
+@app.post("/api/tickets/<int:ticket_id>/comentarios")
+def comentar_ticket(ticket_id):
+    conn = pegar_conexao()
+    ticket = buscar_ticket(conn, ticket_id)
+    if ticket is None:
+        return erro("Ticket não encontrado.", 404)
+    if not pode_comentar(g.usuario, ticket):
+        return erro("Ticket concluído não recebe mais comentários.", 403)
+
+    dados = ler_corpo()
+    if dados is None:
+        return erro("Envie os dados em JSON.", 400)
+    texto = dados.get("texto")
+    texto = texto.strip() if isinstance(texto, str) else ""
+    if not texto or len(texto) > 1000:
+        return erro("O comentário é obrigatório e deve ter até 1000 caracteres.", 400)
+
+    # Quem comentou é sempre o usuário logado (nunca vem do navegador).
+    conn.execute(
+        "INSERT INTO comentarios (ticket_id, usuario_id, texto) VALUES (%s, %s, %s)",
+        (ticket_id, g.usuario["id"], texto),
+    )
+    conn.commit()
+    return jsonify({"ok": True}), 201
+
+
+@app.put("/api/comentarios/<int:comentario_id>")
+def editar_comentario(comentario_id):
+    conn = pegar_conexao()
+    comentario = buscar_comentario(conn, comentario_id)
+    if comentario is None:
+        return erro("Comentário não encontrado.", 404)
+    if not pode_editar_comentario(g.usuario, comentario):
+        return erro("Só o autor pode editar o comentário (e não em ticket concluído).", 403)
+
+    dados = ler_corpo()
+    if dados is None:
+        return erro("Envie os dados em JSON.", 400)
+    texto = dados.get("texto")
+    texto = texto.strip() if isinstance(texto, str) else ""
+    if not texto or len(texto) > 1000:
+        return erro("O comentário é obrigatório e deve ter até 1000 caracteres.", 400)
+
+    # Texto igual ao que já estava: não conta como edição (não aparece "editado")
+    if texto != comentario["texto"]:
+        conn.execute(
+            "UPDATE comentarios SET texto = %s, editado_em = NOW() WHERE id = %s",
+            (texto, comentario_id),
+        )
+        conn.commit()
+    return jsonify({"ok": True})
+
+
+@app.delete("/api/comentarios/<int:comentario_id>")
+def excluir_comentario(comentario_id):
+    conn = pegar_conexao()
+    comentario = buscar_comentario(conn, comentario_id)
+    if comentario is None:
+        return erro("Comentário não encontrado.", 404)
+    if not pode_excluir_comentario(g.usuario, comentario):
+        return erro("Só o autor pode excluir o comentário (e não em ticket concluído).", 403)
+
+    # Exclusão lógica: a linha continua no banco, só deixa de aparecer.
+    conn.execute("UPDATE comentarios SET excluido = TRUE WHERE id = %s", (comentario_id,))
+    conn.commit()
     return jsonify({"ok": True})
 
 

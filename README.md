@@ -73,9 +73,9 @@ UPDATE usuarios SET perfil = 'suporte' WHERE email = 'email@da.pessoa';
 ## Telas
 
 1. **Login** e 2. **Cadastro**
-3. **Kanban** com quatro colunas, abas "Meus tickets" / "Todos os tickets" e filtros
+3. **Kanban** com quatro colunas, abas "Meus tickets" / "Todos os tickets", botão "Novo ticket" e filtros que aplicam na hora (busca, prioridade, criado por)
 4. **Novo ticket / Editar ticket** (janela)
-5. **Detalhes do ticket** (janela): dados, ações disponíveis para quem está logado e histórico em linha do tempo
+5. **Detalhes do ticket** (janela): dados, ações disponíveis para quem está logado, comentários e histórico em linha do tempo
 
 ## Regras de negócio
 
@@ -89,12 +89,16 @@ UPDATE usuarios SET perfil = 'suporte' WHERE email = 'email@da.pessoa';
 |---|---|---|
 | Ver todos os tickets e histórico | Sim | Sim |
 | Criar ticket | Sim (em seu nome) | Sim (em seu nome ou no de outra pessoa) |
-| Mover entre etapas | Não | Qualquer ticket não concluído |
+| Mover entre etapas | Só os próprios tickets, e só em Stage (concluir ou devolver) | Qualquer ticket não concluído |
 | Editar título, descrição e prioridade | Só os que criou **e** só no Backlog | Qualquer ticket que não esteja Concluído |
 | Trocar o responsável depois de criado | Não | Não |
 | Excluir | Só os que criou **e** só no Backlog | Qualquer ticket, **só no Backlog** |
 
+**Comentários.** Qualquer pessoa logada pode comentar em qualquer ticket (todos já veem todos), exceto nos **concluídos**, que ficam somente leitura como o resto do ticket. **Só o autor edita** o próprio comentário e a tela passa a mostrar "editado" (com a data ao passar o mouse). O autor também é o único que pode excluí-lo, mesmo para quem é do suporte. A exclusão é lógica, como nos tickets. Em ticket concluído ninguém edita nem exclui comentários. Comentar não altera "Atualizado em". São separados do histórico: o histórico é o registro automático do que aconteceu, o comentário é texto escrito por uma pessoa. O card mostra quantos comentários o ticket tem.
+
 **Confirmações.** Pedem confirmação: concluir e excluir. Mover entre Backlog, Em andamento e Stage é direto, com aviso na tela.
+
+**Stage é a etapa de teste.** Quem criou o ticket é quem testa: em Stage ele pode concluir (aprovou) ou devolver para Em andamento (reprovou). A devolução exige um motivo, de qualquer perfil (inclusive suporte), que é salvo como comentário do ticket e aparece no histórico como "devolveu o ticket". O suporte também pode concluir, caso o criador esqueça.
 
 **Histórico.** Registra criação, mudança de etapa, conclusão, reabertura, mudança de prioridade e edição de título/descrição, sempre com quem fez e quando (e valor anterior e novo, quando existem).
 
@@ -110,9 +114,11 @@ UPDATE usuarios SET perfil = 'suporte' WHERE email = 'email@da.pessoa';
 usuarios 1 ──< N tickets      (criado_por = o responsável)
 tickets  1 ──< N historico
 usuarios 1 ──< N historico    (quem fez a ação)
+tickets  1 ──< N comentarios
+usuarios 1 ──< N comentarios  (quem escreveu)
 ```
 
-Três tabelas, com chaves primárias e estrangeiras, `NOT NULL`, `UNIQUE` no e-mail e `CHECK` para prioridade, etapa, perfil e tipo de ação (o banco recusa valores inválidos mesmo que o código erre). Os índices existem só onde há consulta que os usa (etapa, criador e ticket do histórico). Mudar a etapa e gravar o histórico acontecem na **mesma transação**: ou as duas coisas são salvas, ou nenhuma.
+Quatro tabelas, com chaves primárias e estrangeiras, `NOT NULL`, `UNIQUE` no e-mail e `CHECK` para prioridade, etapa, perfil e tipo de ação (o banco recusa valores inválidos mesmo que o código erre). Os índices existem só onde há consulta que os usa (etapa, criador, ticket do histórico e ticket dos comentários). Mudar a etapa e gravar o histórico acontecem na **mesma transação**: ou as duas coisas são salvas, ou nenhuma.
 
 ## Segurança (o básico, bem aplicado)
 
@@ -133,13 +139,13 @@ Três tabelas, com chaves primárias e estrangeiras, `NOT NULL`, `UNIQUE` no e-m
 - **SQL puro, sem ORM.** O SQL fica à vista e é fácil de explicar.
 - **Perfil "suporte" em vez de "admin".** O nome diz o que a pessoa faz (atender chamados) e evita sugerir poderes de administração do sistema, que não existem aqui.
 - **O backend também entrega o frontend**, então não há CORS para configurar.
-- **Botões em vez de arrastar e soltar** para mover tickets: mais simples e funciona igual no celular.
+- **Arrastar e soltar nativo do navegador** (sem biblioteca) para mover cards, só para a etapa vizinha e só para quem tem permissão (suporte, ou o criador do ticket quando ele está em Stage); o backend valida de novo. Os botões da janela de detalhes continuam, para teclado e celular (onde arrastar é ruim).
 - **Janelas nativas (`<dialog>`)** para detalhes, formulário e confirmação, em vez de uma biblioteca.
 
 ## Premissas
 
 - "Responsável" = quem abriu o ticket. Quem **atende** não é registrado como campo: o histórico mostra quem moveu o ticket em cada etapa. Se o enunciado quis dizer o contrário (responsável = quem resolve), a mudança é adicionar uma coluna `atendente_id` em `tickets`.
-- Só o suporte move tickets entre as etapas (quem atende); usuário comum acompanha. É uma linha em `pode_mover()` no `app.py` caso se queira permitir também ao criador.
+- Usuário comum só mexe no fluxo dos próprios tickets em Stage; o resto do fluxo é do suporte. A regra está em `etapas_de_destino()` no `app.py`.
 - Os usuários de suporte vêm do `schema.sql`. Não existe tela para promover alguém a suporte (isso é feito direto no banco).
 - Não incluí filtro por etapa, porque o Kanban já separa os tickets por etapa.
 
@@ -151,6 +157,7 @@ Três tabelas, com chaves primárias e estrangeiras, `NOT NULL`, `UNIQUE` no e-m
 - Sem token CSRF dedicado (a proteção é a combinação JSON + `SameSite=Lax`).
 - Sem recuperação de senha, sem confirmação de e-mail e sem tela de gerenciamento de usuários.
 - Sem tela para ver tickets excluídos nem para desfazer exclusão.
+- Não guardo o texto anterior de um comentário editado (só a data da edição) e não há notificação quando alguém comenta: a lista só atualiza ao abrir o ticket.
 - Sem paginação: todos os tickets são carregados de uma vez.
 - Sem testes automatizados no repositório (a verificação foi manual e por scripts descartáveis).
 - O Kanban não se atualiza sozinho: outra pessoa mexendo no mesmo ticket só aparece depois de recarregar. O servidor detecta o conflito e avisa quem tentou mover um ticket já alterado.
@@ -161,8 +168,8 @@ Três tabelas, com chaves primárias e estrangeiras, `NOT NULL`, `UNIQUE` no e-m
 - **Setor de quem abriu o ticket.** Um campo `setor` no usuário (preenchido no cadastro, de preferência por uma lista fixa para não haver "Financeiro" e "financeiro" como setores diferentes) e exibido nos detalhes do ticket ("Criado por Ana · Financeiro"). Ajudaria o suporte a saber de onde vem o chamado. Fica de fora agora por não fazer parte do fluxo principal pedido.
 - Testes automatizados da API (por exemplo, com `pytest`) e das regras de permissão.
 - Limite de tentativas de login e token CSRF.
-- Arrastar e soltar no Kanban; atualização automática da tela.
-- Tela de gerenciamento de usuários (com um perfil `admin` separado do suporte), comentários nos tickets, anexos, prazos (SLA).
+- Atualização automática da tela.
+- Tela de gerenciamento de usuários (com um perfil `admin` separado do suporte), menções, histórico de edições dos comentários, anexos, prazos (SLA).
 - Migrações de banco versionadas (em vez de recriar tudo pelo `schema.sql`).
 
 ### O que eu usaria das ferramentas deixadas de fora, e por quê
