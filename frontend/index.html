@@ -7,8 +7,7 @@
     <link rel="stylesheet" href="/style.css">
 </head>
 <body>
-
-    <!-- ============ CABEÇALHO (só aparece depois do login) ============ -->
+    <!-- ============ CABEÇALHO (aparece após o login) ============ -->
     <header id="cabecalho" class="cabecalho" hidden>
         <h1 class="marca">Mini Helpdesk</h1>
         <div class="cabecalho-usuario">
@@ -209,7 +208,7 @@
                     <form id="form-comentario" class="form-comentario">
                         <label for="comentario-texto" class="so-leitor">Novo comentário</label>
                         <textarea id="comentario-texto" rows="2" maxlength="1000"
-                                  placeholder="Escreva um comentário (Shift+Enter quebra a linha)" required></textarea>
+                                  placeholder="Escreva um comentário" required></textarea>
                         <button type="submit" id="btn-comentar">Comentar</button>
                     </form>
                     <p id="comentario-aviso" class="dica" hidden>Ticket concluído: não recebe mais comentários.</p>

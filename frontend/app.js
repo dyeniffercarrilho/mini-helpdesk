@@ -334,11 +334,7 @@ function desenharKanban(tickets) {
     }
 }
 
-// ---------- Arrastar e soltar (drag and drop nativo do navegador) ----------
-// O navegador já sabe arrastar elementos; nós só dizemos QUEM pode ser arrastado
-// (draggable) e O QUE fazer quando soltar numa coluna (evento "drop").
-// Quem decide de verdade se o movimento vale é o backend: aqui só evitamos
-// mostrar como possível o que o servidor vai recusar.
+// ---------- Drag and Drop nativo do navegador ----------
 let ticketArrastado = null;   // ticket que está sendo arrastado agora (ou null)
 
 // Só dá para soltar nas etapas que o backend liberou para este usuário neste ticket
@@ -720,7 +716,7 @@ function pedirMotivoDaDevolucao() {
 async function excluirTicket(ticket) {
     const confirmou = await confirmar(
         "Excluir ticket?",
-        "O ticket deixará de aparecer no sistema. Esta ação não pode ser desfeita por aqui.",
+        "O ticket deixará de aparecer no sistema.",
         "Excluir",
         true);
     if (!confirmou) return;

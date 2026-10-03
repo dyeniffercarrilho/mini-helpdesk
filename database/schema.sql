@@ -16,6 +16,7 @@
 -- ATENÇÃO: ele APAGA as tabelas e cria tudo de novo.
 -- =====================================================================
 
+-- reseta as tabelas para o estado inicial
 DROP TABLE IF EXISTS comentarios;
 DROP TABLE IF EXISTS historico;
 DROP TABLE IF EXISTS tickets;

@@ -42,10 +42,12 @@ from werkzeug.security import check_password_hash, generate_password_hash
 # Na Vercel não existe .env: as variáveis são configuradas no painel do projeto.
 load_dotenv()
 
+# descobrir onde fica a pasta do frontend
 PASTA_FRONTEND = os.path.normpath(
     os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "frontend")
 )
 
+# criar o aplicativo
 app = Flask(__name__)
 
 # SECRET_KEY assina o cookie de sessão: sem ela, qualquer pessoa poderia
@@ -54,10 +56,24 @@ app.secret_key = os.environ.get("SECRET_KEY")
 if not app.secret_key:
     raise RuntimeError("Defina a variável SECRET_KEY (veja o arquivo .env.example).")
 
+# Configurações do cookie de sessão (o "bilhete" de login que o navegador guarda).
+# Cada uma protege contra um tipo de ataque diferente.
 app.config.update(
-    SESSION_COOKIE_HTTPONLY=True,    # o JavaScript da página não consegue ler o cookie
-    SESSION_COOKIE_SAMESITE="Lax",   # o navegador não envia o cookie em requisições de outros sites
-    SESSION_COOKIE_SECURE=bool(os.environ.get("VERCEL")),  # na Vercel (https), só envia por https
+    # HTTPONLY: o cookie só viaja nos pedidos ao servidor; nenhum JavaScript da
+    # página consegue lê-lo. Se alguém conseguisse injetar um código malicioso na
+    # página, ele não conseguiria roubar o cookie de login.
+    SESSION_COOKIE_HTTPONLY=True,
+
+    # SAMESITE "Lax": o navegador não envia o cookie quando o pedido vem de OUTRO
+    # site. Assim, uma página maliciosa aberta em outra aba não consegue fazer o
+    # navegador agir em nome de quem está logado (ataque chamado CSRF).
+    SESSION_COOKIE_SAMESITE="Lax",
+
+    # SECURE: o cookie só viaja por conexão https (criptografada). Só ligamos isso
+    # na Vercel: a variável de ambiente VERCEL só existe lá, então bool(...) vira
+    # True na Vercel (que usa https) e False no computador. No localhost o endereço
+    # é http, e com True o navegador não guardaria o cookie e o login não funcionaria.
+    SESSION_COOKIE_SECURE=bool(os.environ.get("VERCEL")),
 )
 
 ETAPAS = ["backlog", "andamento", "stage", "concluido"]
@@ -74,8 +90,24 @@ MOVIMENTOS_PERMITIDOS = {
     "concluido": [],
 }
 
-# Consulta base dos tickets. O JOIN traz o nome de quem criou (o "responsável").
-# "excluido = FALSE" esconde os tickets excluídos (exclusão lógica).
+#   SELECT ...        quais colunas queremos no resultado.
+#                     "t." quer dizer "da tabela tickets" (apelido t, definido no FROM).
+#   c.nome AS criador_nome
+#                     o nome de quem criou o ticket. O ticket só guarda o NÚMERO do
+#                     usuário (criado_por); o nome mora na tabela usuarios. O "AS"
+#                     dá um apelido à coluna no resultado.
+#   (SELECT COUNT(*) ...) AS total_comentarios
+#                     uma consulta dentro da consulta: para cada ticket, conta os
+#                     comentários dele que não foram excluídos. É o número do balãozinho
+#                     que aparece no card.
+#   FROM tickets t    a tabela principal, com o apelido "t".
+#   JOIN usuarios c ON c.id = t.criado_por
+#                     junta as duas tabelas: para cada ticket, acha em usuarios (apelido c)
+#                     a linha cujo id é igual ao criado_por do ticket. É assim que o nome
+#                     de quem criou (o "responsável") vem junto com o ticket.
+#   WHERE t.excluido = FALSE
+#                     só entram os tickets que NÃO foram excluídos. Excluir é "lógico":
+#                     a linha continua no banco, mas este filtro a esconde do sistema.
 SQL_TICKET = """
     SELECT t.id, t.titulo, t.descricao, t.prioridade, t.etapa,
            t.criado_por, c.nome AS criador_nome,
@@ -85,7 +117,6 @@ SQL_TICKET = """
     JOIN usuarios c ON c.id = t.criado_por
     WHERE t.excluido = FALSE
 """
-
 
 # ----------------------------------------------------------------------
 # Banco de dados
@@ -104,7 +135,7 @@ def pegar_conexao():
 
 @app.teardown_appcontext
 def fechar_conexao(_erro):
-    """Roda no fim de toda requisição. Fechar sem commit desfaz (rollback) o que ficou pendente."""
+    """Roda no fim de toda requisição."""
     conn = g.pop("conn", None)
     if conn is not None:
         conn.close()
@@ -177,7 +208,7 @@ def validar_campos_do_ticket(dados):
 
 
 # ----------------------------------------------------------------------
-# Regras de permissão (a decisão final é SEMPRE do backend)
+# Regras de permissão
 # ----------------------------------------------------------------------
 def eh_suporte(usuario):
     """O perfil 'suporte' é o da equipe de atendimento (guardado na coluna usuarios.perfil)."""
@@ -417,7 +448,7 @@ def listar_tickets():
     filtros = ""
     parametros = []
 
-    # Os trechos de SQL abaixo são fixos (escritos por nós). O que vem do
+    # Os trechos de SQL abaixo são fixos. O que vem do
     # navegador entra SEMPRE pelos %s, nunca colado no texto do SQL.
     if request.args.get("meus") == "1":
         filtros += " AND t.criado_por = %s"

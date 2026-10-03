@@ -120,7 +120,7 @@ usuarios 1 ──< N comentarios  (quem escreveu)
 
 Quatro tabelas, com chaves primárias e estrangeiras, `NOT NULL`, `UNIQUE` no e-mail e `CHECK` para prioridade, etapa, perfil e tipo de ação (o banco recusa valores inválidos mesmo que o código erre). Os índices existem só onde há consulta que os usa (etapa, criador, ticket do histórico e ticket dos comentários). Mudar a etapa e gravar o histórico acontecem na **mesma transação**: ou as duas coisas são salvas, ou nenhuma.
 
-## Segurança (o básico, bem aplicado)
+## Segurança
 
 - Senhas com `generate_password_hash` / `check_password_hash` (nunca em texto puro).
 - Sessão por cookie assinado (`HttpOnly`, `SameSite=Lax`, `Secure` na Vercel). A `SECRET_KEY` não tem valor padrão: sem ela o servidor nem inicia.
@@ -137,7 +137,6 @@ Quatro tabelas, com chaves primárias e estrangeiras, `NOT NULL`, `UNIQUE` no e-
 - **Flask em vez de PHP puro.** A Vercel não executa PHP oficialmente e não guarda sessões em arquivo (cada requisição pode cair numa função diferente). Flask guarda a sessão num cookie assinado, o que resolve isso com pouco código.
 - **PostgreSQL em vez de MySQL.** A Vercel não hospeda banco; o Postgres da Neon é o que se conecta direto pelo painel dela. A modelagem é a mesma.
 - **SQL puro, sem ORM.** O SQL fica à vista e é fácil de explicar.
-- **Perfil "suporte" em vez de "admin".** O nome diz o que a pessoa faz (atender chamados) e evita sugerir poderes de administração do sistema, que não existem aqui.
 - **O backend também entrega o frontend**, então não há CORS para configurar.
 - **Arrastar e soltar nativo do navegador** (sem biblioteca) para mover cards, só para a etapa vizinha e só para quem tem permissão (suporte, ou o criador do ticket quando ele está em Stage); o backend valida de novo. Os botões da janela de detalhes continuam, para teclado e celular (onde arrastar é ruim).
 - **Janelas nativas (`<dialog>`)** para detalhes, formulário e confirmação, em vez de uma biblioteca.
@@ -151,7 +150,6 @@ Quatro tabelas, com chaves primárias e estrangeiras, `NOT NULL`, `UNIQUE` no e-
 
 ## Limitações conhecidas
 
-- **Publicação na Vercel ainda não testada de ponta a ponta.** O backend e a interface foram testados localmente (API e navegador), mas o *deploy* na Vercel/Neon depende de configuração na conta e deve ser validado após publicar. O ponto de atenção é o Flask encontrar a pasta `frontend/` no ambiente da Vercel; se não encontrar, a solução é mover os arquivos do frontend para uma pasta `public/`.
 - Como o responsável é fixo, um ticket aberto no nome errado só se corrige excluindo (possível apenas no Backlog) e criando de novo.
 - Sem limite de tentativas de login (um ataque de força bruta não é bloqueado).
 - Sem token CSRF dedicado (a proteção é a combinação JSON + `SameSite=Lax`).
@@ -161,7 +159,6 @@ Quatro tabelas, com chaves primárias e estrangeiras, `NOT NULL`, `UNIQUE` no e-
 - Sem paginação: todos os tickets são carregados de uma vez.
 - Sem testes automatizados no repositório (a verificação foi manual e por scripts descartáveis).
 - O Kanban não se atualiza sozinho: outra pessoa mexendo no mesmo ticket só aparece depois de recarregar. O servidor detecta o conflito e avisa quem tentou mover um ticket já alterado.
-- Os dados de teste do `schema.sql` têm senhas publicadas neste README: apague-os antes de qualquer uso real.
 
 ## Possíveis evoluções
 
@@ -171,12 +168,3 @@ Quatro tabelas, com chaves primárias e estrangeiras, `NOT NULL`, `UNIQUE` no e-
 - Atualização automática da tela.
 - Tela de gerenciamento de usuários (com um perfil `admin` separado do suporte), menções, histórico de edições dos comentários, anexos, prazos (SLA).
 - Migrações de banco versionadas (em vez de recriar tudo pelo `schema.sql`).
-
-### O que eu usaria das ferramentas deixadas de fora, e por quê
-
-- **TypeScript:** o primeiro que adotaria; pega erros de tipo cedo e ajuda a manter o `app.js` conforme ele cresce.
-- **ORM** (como SQLAlchemy): quando houver muitas tabelas e consultas, para reduzir repetição. Hoje o SQL puro é mais claro.
-- **React/Next.js:** se a interface ganhasse muitas telas e estados; para três telas, JavaScript puro basta.
-- **Docker:** para o ambiente ser igual em qualquer máquina e facilitar o CI.
-- **JWT:** só se houvesse um app móvel ou outra API consumindo o sistema; para um navegador, o cookie de sessão é mais simples e seguro.
-- **Tailwind ou Bootstrap:** para padronizar o visual numa equipe maior; aqui o CSS próprio é pequeno e fácil de explicar.
